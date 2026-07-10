@@ -124,7 +124,19 @@ extern "C" EXPORT void InitAPI(vguiapi_t * api)
 {
 	g_api = api;
 	g_api->Startup = VGui_Startup;
+#ifndef INTERNAL_VGUI_SUPPORT
+	// External vgui_support module: the engine owns this .so's lifetime — it calls Shutdown while
+	// the module is still loaded, then COM_FreeLibrary — so registering it is safe and frees the
+	// panels/surface at the right time.
 	g_api->Shutdown = VGui_Shutdown;
+#else
+	// Client-hosted VGUI (INTERNAL_VGUI_SUPPORT): this function pointer lives INSIDE client.so.
+	// Unless the game declares `internal_vgui_support 1` in gameinfo, the engine unloads the client
+	// BEFORE calling vgui.dllFuncs.Shutdown() (cl_main.c CL_Shutdown), so this pointer would dangle
+	// -> SIGSEGV on quit. Leave it NULL: the engine's `if( vgui.dllFuncs.Shutdown )` guard skips it,
+	// and the panels/surface are reclaimed at process teardown. This keeps the client a crash-free
+	// drop-in on a stock TS gameinfo without requiring the FWGS-only internal_vgui_support flag.
+#endif
 	g_api->GetPanel = VGui_GetPanel;
 	g_api->Paint = VGui_Paint;
 	g_api->Mouse = VGUI_Mouse;
